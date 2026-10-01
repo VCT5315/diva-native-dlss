@@ -1,0 +1,6 @@
+enabled = true
+name = "Diva Native DLSS"
+description = "Native geometry motion and full-resolution DLAA. F4 toggle with in-game status. Experimental."
+version = "0.2.4"
+author = "xureimu-bit"
+dll = ["DivaNativeDLSS.dll"]
