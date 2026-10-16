@@ -20,6 +20,7 @@ int main(int argc,char** argv){
     bool testPause=argc>1&&strstr(argv[1],"pause")!=nullptr;
     bool testStatus=argc>1&&strstr(argv[1],"status")!=nullptr;
     bool testKeys=argc>1&&strstr(argv[1],"keys")!=nullptr;
+    bool testOverlay=argc>1&&strstr(argv[1],"overlay")!=nullptr;
     WNDCLASSW wc{};wc.lpfnWndProc=WindowProc;wc.lpszClassName=L"DivaDLSSGpuTest";wc.hInstance=GetModuleHandleW(nullptr);RegisterClassW(&wc);
     HWND window=CreateWindowW(wc.lpszClassName,L"Diva DLSS GPU Test",WS_OVERLAPPEDWINDOW,0,0,1280,720,nullptr,nullptr,wc.hInstance,nullptr);
     DXGI_SWAP_CHAIN_DESC sd{};sd.BufferDesc.Width=1280;sd.BufferDesc.Height=720;sd.BufferDesc.Format=DXGI_FORMAT_R8G8B8A8_UNORM;sd.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;sd.BufferCount=1;sd.OutputWindow=window;sd.SampleDesc.Count=1;sd.Windowed=TRUE;
@@ -138,9 +139,57 @@ int main(int argc,char** argv){
         if(GetPrivateProfileIntW(L"DLSS",L"Enable",99,ini.c_str())!=1){printf("FAIL next press did not toggle\n");return 18;}
         printf("short press queued; 10 repeated key events ignored; next press toggled once; settings persisted\n");
     }
+    if(testOverlay){
+        wchar_t modPath[MAX_PATH]{};GetModuleFileNameW(mod,modPath,MAX_PATH);wchar_t* slash=wcsrchr(modPath,L'\\');if(!slash)return 15;*(slash+1)=0;std::wstring ini=std::wstring(modPath)+L"settings.ini";
+        auto overlayVisible=reinterpret_cast<int(*)()>(GetProcAddress(mod,"DivaNativeDLSSOverlayVisible"));
+        if(!overlayVisible){printf("FAIL overlay export missing\n");return 30;}
+        // F7 opens the panel.
+        SendMessageW(window,WM_KEYDOWN,VK_F7,1);SendMessageW(window,WM_KEYUP,VK_F7,LPARAM(1)|(LPARAM(1)<<30)|(LPARAM(1)<<31));
+        // A few frames so the panel is drawn and blended over the scene.
+        for(int i=0;i<3;++i){
+            float offset[]={0,0,0,0};c->UpdateSubresource(cb.Get(),0,nullptr,offset,0,0);
+            float clearScene[]={0,0,0,1};c->ClearRenderTargetView(rtv.Get(),clearScene);c->ClearDepthStencilView(dsv.Get(),D3D11_CLEAR_DEPTH,1,0);
+            auto target=rtv.Get();c->OMSetRenderTargets(1,&target,dsv.Get());
+            D3D11_VIEWPORT vp{0,0,float(testWidth),float(testHeight),0,1};c->RSSetViewports(1,&vp);c->RSSetState(nullptr);
+            c->IASetInputLayout(layout.Get());c->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+            UINT stride=24,zero=0;auto buffer=vb.Get();c->IASetVertexBuffers(0,1,&buffer,&stride,&zero);
+            c->VSSetShader(vs.Get(),nullptr,0);c->PSSetShader(ps.Get(),nullptr,0);
+            auto constant=cb.Get();c->VSSetConstantBuffers(0,1,&constant);c->PSSetConstantBuffers(0,1,&constant);
+            c->IASetIndexBuffer(ib.Get(),DXGI_FORMAT_R16_UINT,0);c->DrawIndexed(3,0,0);
+            onFrame(swap.Get());
+        }
+        if(!overlayVisible()){printf("FAIL overlay did not open on F7\n");return 31;}
+
+        // The panel is centred and 560 px wide, so the middle scanline must show
+        // panel pixels instead of the scene colour.
+        c->CopyResource(stage.Get(),back.Get());D3D11_MAPPED_SUBRESOURCE m{};
+        if(FAILED(c->Map(stage.Get(),0,D3D11_MAP_READ,0,&m)))return 32;
+        auto* row=static_cast<unsigned char*>(m.pData)+(testHeight/2)*m.RowPitch;
+        int replaced=0;
+        for(UINT x=0;x<testWidth;++x){const unsigned char* p=row+x*4;if(abs(int(p[0])-51)>10||abs(int(p[1])-102)>10||abs(int(p[2])-153)>10)++replaced;}
+        printf("overlay scanline: %d / %u pixels differ from the scene\n",replaced,testWidth);
+        c->Unmap(stage.Get(),0);
+        if(replaced<200){printf("FAIL overlay panel not visible on screen\n");return 33;}
+
+        // Keyboard navigation must change and persist a setting: DOWN DOWN lands
+        // on Sharpness, RIGHT raises it by 5.
+        SendMessageW(window,WM_KEYDOWN,VK_DOWN,1);SendMessageW(window,WM_KEYDOWN,VK_DOWN,1);SendMessageW(window,WM_KEYDOWN,VK_RIGHT,1);
+        for(int i=0;i<3;++i){onFrame(swap.Get());}
+        const int sharpness=GetPrivateProfileIntW(L"FSR",L"Sharpness",-1,ini.c_str());
+        printf("panel changed FSR sharpness to %d\n",sharpness);
+        if(sharpness!=5){printf("FAIL panel did not persist a setting change\n");return 34;}
+
+        // F7 again closes it.
+        SendMessageW(window,WM_KEYDOWN,VK_F7,1);onFrame(swap.Get());
+        if(overlayVisible()){printf("FAIL overlay did not close\n");return 35;}
+        printf("configuration panel opened, rendered, changed a setting and closed\n");
+    }
     printf("GPU removed reason=%08X; state preserved\n",device->GetDeviceRemovedReason());
     auto frames=reinterpret_cast<unsigned long long(*)()>(GetProcAddress(mod,"DivaNativeDLSSSuccessfulFrames"))();printf("DLSS successful published frames=%llu\n",frames);
-    if(!testMotion&&frames!=24){printf("FAIL: DLSS did not evaluate and publish every frame\n");return 9;}
+    // The base loop publishes exactly 24 frames; the overlay mode runs a few
+    // more on purpose, so it only has to be at least that many.
+    const bool frameCountOK = testMotion || (testOverlay ? frames >= 24 : frames == 24);
+    if(!frameCountOK){printf("FAIL: DLSS did not evaluate and publish every frame\n");return 9;}
     printf("render validation complete; forced test-host exit; NGX Shutdown1 not tested\n");
     TerminateProcess(GetCurrentProcess(),FAILED(device->GetDeviceRemovedReason())?7:0);
     return FAILED(device->GetDeviceRemovedReason())?7:0;

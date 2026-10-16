@@ -1,6 +1,7 @@
-enabled = true
+﻿enabled = true
 name = "Diva Native DLSS"
-description = "Native geometry motion and full-resolution DLAA. F4 toggle with in-game status. Experimental."
-version = "0.2.4"
+description = "Switchable DLSS/DLAA and AMD FSR 4.1 (Native AA) from reconstructed game geometry. F4 toggle, F7 configuration panel. Experimental."
+version = "0.3.0"
 author = "xureimu-bit"
 dll = ["DivaNativeDLSS.dll"]
+include = ["."]

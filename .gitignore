@@ -1,5 +1,13 @@
+# Build output
 /build/
 /out/
+/release/
+
+# Working copies and scratch trees
+/_extract/
+/_reshade/
+
+# Binaries - never commit compiled artefacts
 *.dll
 *.addon64
 *.exe
@@ -8,8 +16,14 @@
 *.pdb
 *.ilk
 *.exp
+
+# Logs and test output
 *.log
 *.csv
 *.ppm
+
+# IDE
 .vs/
+
+# NVIDIA RTX SDK is not redistributable; fetch it with FetchSDK.ps1
 /third_party/ngx/

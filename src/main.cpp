@@ -10,6 +10,7 @@ Renderer& renderer=*new Renderer();
 std::atomic<bool> stopped{false},started{false};
 ID3D11Device* gameDevice=nullptr;
 ID3D11DeviceContext* gameContext=nullptr;
+unsigned int gameContextDraws=0,otherContextDraws=0;
 IDXGISwapChain* gameSwap=nullptr;
 thread_local bool replay=false,replayInstanced=false;
 thread_local UINT replayInstance=0;
@@ -26,26 +27,72 @@ using EndEventFn=INT(STDMETHODCALLTYPE*)(ID3DUserDefinedAnnotation*);
 BeginEventFn originalBeginEvent=nullptr;EndEventFn originalEndEvent=nullptr;
 ComPtr<ID3DUserDefinedAnnotation> gameAnnotation;
 thread_local std::vector<bool> eventStack;
+// Pairing counters. 'pass_sprite' is a per-frame annotation, so begins and ends
+// must match; a divergence means the boundary the mod resolves at is wrong.
+unsigned int annotationBegins=0,annotationEnds=0,foregroundBegins=0;
 INT STDMETHODCALLTYPE HookBeginEvent(ID3DUserDefinedAnnotation* annotation,LPCWSTR name){
     INT result=originalBeginEvent(annotation,name);
     if(stopped||replay||annotation!=gameAnnotation.Get())return result;
     bool foreground=name&&wcscmp(name,L"pass_sprite")==0;eventStack.push_back(foreground);
+    ++annotationBegins;if(foreground)++foregroundBegins;
+    if(annotationBegins%600==0)Log("annotations begins=%u ends=%u foreground=%u stack=%zu",annotationBegins,annotationEnds,foregroundBegins,eventStack.size());
     if(foreground){renderer.BeginOverlay();static unsigned int hits=0;if(hits++<4)Log("GPU foreground event reached; pass_sprite executes before UI draw");}
     return result;
 }
 INT STDMETHODCALLTYPE HookEndEvent(ID3DUserDefinedAnnotation* annotation){
     if(!stopped&&!replay&&annotation==gameAnnotation.Get()&&!eventStack.empty()){
-        if(eventStack.back())renderer.EndOverlay();eventStack.pop_back();
+        if(eventStack.back())renderer.EndOverlay();eventStack.pop_back();++annotationEnds;
     }
     return originalEndEvent(annotation);
 }
 void* drawTargets[4]{};
 std::vector<void*> hookTargets;
+// ExecuteCommandList is vtable slot 58: 54 within ID3D11DeviceContext plus the
+// 4 ID3D11DeviceChild methods and 3 IUnknown methods ahead of it. Counted from
+// d3d11.h rather than remembered, because a wrong slot patches an unrelated
+// function and kills the game.
+using ExecuteCommandListFn=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,ID3D11CommandList*,BOOL);
+ExecuteCommandListFn originalExecuteCommandList=nullptr;
+unsigned int executeCommandListCalls=0,executeCommandListOnGame=0;
+void STDMETHODCALLTYPE HookExecuteCommandList(ID3D11DeviceContext* c,ID3D11CommandList* list,BOOL restore){
+    ++executeCommandListCalls;if(c==gameContext)++executeCommandListOnGame;
+    if(executeCommandListCalls%60==0)Log("ExecuteCommandList calls=%u onGame=%u ctx=%p game=%p",executeCommandListCalls,executeCommandListOnGame,c,gameContext);
+    originalExecuteCommandList(c,list,restore);
+}
 HWND gameWindow=nullptr;WNDPROC originalWindowProc=nullptr;
+// Mouse coordinates arrive in client pixels; the panel works in backbuffer
+// pixels, so scale by the ratio between the two.
+void QueueMouseEvent(HWND window,LPARAM l,bool down){
+    RECT client{};if(!GetClientRect(window,&client))return;
+    const int clientWidth=client.right-client.left,clientHeight=client.bottom-client.top;
+    const UINT screenWidth=renderer.ScreenWidth(),screenHeight=renderer.ScreenHeight();
+    if(clientWidth<=0||clientHeight<=0||!screenWidth||!screenHeight)return;
+    const int x=int(short(LOWORD(l)))*int(screenWidth)/clientWidth;
+    const int y=int(short(HIWORD(l)))*int(screenHeight)/clientHeight;
+    if(down)renderer.QueueMouseDown(x,y);else renderer.QueueMouseMove(x,y);
+}
 LRESULT CALLBACK GameWindowProc(HWND window,UINT message,WPARAM w,LPARAM l){
     // Bit 30 marks repeated key-down messages. The first press is queued even
     // if key-up happens before the next rendered frame. Alt+F4 passes through.
-    if(!stopped&&message==WM_KEYDOWN&&!(l&(LPARAM(1)<<30))&&w>=VK_F4&&w<=VK_F6)renderer.QueueKey(UINT(w));
+    if(!stopped){
+        if(message==WM_KEYDOWN&&!(l&(LPARAM(1)<<30))){
+            renderer.QueueKey(UINT(w));
+            // While the panel is open it owns the navigation keys, so the game
+            // does not also scroll or confirm behind it. This only covers
+            // window-message input; a game reading raw input directly may still
+            // see those keys.
+            if(renderer.OverlayVisible()){
+                switch(w){
+                case VK_UP:case VK_DOWN:case VK_LEFT:case VK_RIGHT:
+                case VK_RETURN:case VK_ESCAPE:case VK_F7:
+                    return 0;
+                default:break;
+                }
+            }
+        }
+        else if(message==WM_MOUSEMOVE&&renderer.OverlayVisible())QueueMouseEvent(window,l,false);
+        else if(message==WM_LBUTTONDOWN&&renderer.OverlayVisible())QueueMouseEvent(window,l,true);
+    }
     return CallWindowProcW(originalWindowProc,window,message,w,l);
 }
 
@@ -69,6 +116,12 @@ void ReplayDraw(ID3D11DeviceContext* c,bool indexed,UINT count,UINT start,INT ba
 }
 void PrepareDraw(ID3D11DeviceContext* c,Renderer::ViewportRestore& viewport){
     if(replay)return;
+    // Every draw reaches here, but everything downstream is gated on
+    // `c == gameContext`. If the game renders on a context other than the one DML
+    // handed us, the mod then looks perfectly healthy while processing almost
+    // nothing - which is exactly the 1080p symptom. Count both to tell them apart.
+    if(c==gameContext){if(++gameContextDraws%600==0)Log("draw contexts game=%u other=%u",gameContextDraws,otherContextDraws);}
+    else if(++otherContextDraws%600==0)Log("draw contexts game=%u other=%u this=%p game=%p",gameContextDraws,otherContextDraws,c,gameContext);
     if(renderer.InOverlay()){replay=true;renderer.ResolveBeforeUI(c,&ReplayDraw);replay=false;}
     renderer.BeforeDraw(c,viewport);
 }
@@ -102,8 +155,30 @@ void STDMETHODCALLTYPE HookDrawInstanced(ID3D11DeviceContext* c,UINT count,UINT 
         replayInstanced=false;replay=false;
     }
 }
-void UpdateExtent(IDXGISwapChain* s){
-    ComPtr<ID3D11Texture2D> back;
+using OMSetRenderTargetsFn=void(STDMETHODCALLTYPE*)(ID3D11DeviceContext*,UINT,ID3D11RenderTargetView* const*,ID3D11DepthStencilView*);
+OMSetRenderTargetsFn originalOMSetRenderTargets=nullptr;
+// Record only, never substitute - yet. Option C (render the 3D at low resolution,
+// keep the UI at 4K) means swapping the game's scene render target for a smaller
+// one, and the upscale has to happen exactly when the game stops drawing into it
+// and starts reading it. Getting that boundary wrong makes post-processing read a
+// stale surface, which looks like corruption rather than a crash. So first: the
+// real binding sequence.
+void STDMETHODCALLTYPE HookOMSetRenderTargets(ID3D11DeviceContext* c,UINT numViews,ID3D11RenderTargetView* const* ppRTVs,ID3D11DepthStencilView* pDSV){
+    static void* lastRT=nullptr;static unsigned int binds=0;static unsigned int logged=0;
+    void* current=(numViews&&ppRTVs)?static_cast<void*>(ppRTVs[0]):nullptr;
+    if(c==gameContext&&!replay&&current!=lastRT&&logged<120){
+        lastRT=current;++logged;++binds;
+        D3D11_TEXTURE2D_DESC rt{};bool haveRT=false;
+        if(current){ComPtr<ID3D11Resource> r;ppRTVs[0]->GetResource(&r);ComPtr<ID3D11Texture2D> t;r.As(&t);if(t){t->GetDesc(&rt);haveRT=true;}}
+        D3D11_TEXTURE2D_DESC dp{};bool haveD=false;
+        if(pDSV){ComPtr<ID3D11Resource> r;pDSV->GetResource(&r);ComPtr<ID3D11Texture2D> t;r.As(&t);if(t){t->GetDesc(&dp);haveD=true;}}
+        Log("OMSetRT #%u n=%u rt=%p %ux%u fmt=%u dsv=%d %ux%u fmt=%u inUI=%d",
+            binds,numViews,current,haveRT?rt.Width:0,haveRT?rt.Height:0,haveRT?UINT(rt.Format):0,
+            pDSV?1:0,haveD?dp.Width:0,haveD?dp.Height:0,haveD?UINT(dp.Format):0,renderer.InOverlay()?1:0);
+    }
+    originalOMSetRenderTargets(c,numViews,ppRTVs,pDSV);
+}
+void UpdateExtent(IDXGISwapChain* s){    ComPtr<ID3D11Texture2D> back;
     if(SUCCEEDED(s->GetBuffer(0,IID_PPV_ARGS(&back)))){
         D3D11_TEXTURE2D_DESC bd{};back->GetDesc(&bd);renderer.SetScreenExtent(bd.Width,bd.Height);
         Log("game backbuffer extent=%ux%u format=%u",bd.Width,bd.Height,bd.Format);
@@ -144,10 +219,15 @@ void Install(ID3D11Device* d,ID3D11DeviceContext* c,IDXGISwapChain* s){
 std::wstring ModDirectory(){wchar_t p[MAX_PATH]{};GetModuleFileNameW(module,p,MAX_PATH);std::wstring s(p);return s.substr(0,s.find_last_of(L"\\/"));}
 std::wstring GameDirectory(){wchar_t p[MAX_PATH]{};GetModuleFileNameW(nullptr,p,MAX_PATH);std::wstring s(p);return s.substr(0,s.find_last_of(L"\\/"));}
 void Log(const char* format,...){std::lock_guard<std::mutex> lock(logMutex);char b[2048]{};va_list a;va_start(a,format);vsnprintf_s(b,sizeof(b),_TRUNCATE,format,a);va_end(a);FILE* f=nullptr;_wfopen_s(&f,(ModDirectory()+L"\\DivaNativeDLSS.log").c_str(),L"a");if(f){fprintf(f,"%s\n",b);fclose(f);}}
-extern "C" __declspec(dllexport) void Init(){if(started.exchange(true))return;Log("DivaNativeDLSS build 27 loaded; executed GPU foreground event; DLAA/NR before UI; no UI classification mask");}
+extern "C" __declspec(dllexport) void Init(){if(started.exchange(true))return;Log("DivaNativeDLSS build 28 loaded; switchable DLSS/FSR4 backends; F7 configuration panel");}
 // Optional integration boundary, also exercised by the GPU validation host.
 extern "C" __declspec(dllexport) void DivaNativeDLSSBeginOverlay(){if(!stopped)renderer.BeginOverlay();}
 extern "C" __declspec(dllexport) void DivaNativeDLSSEndOverlay(){if(!stopped)renderer.EndOverlay();}
+// Small surface used by the validation host to drive the configuration panel.
+extern "C" __declspec(dllexport) int DivaNativeDLSSOverlayVisible(){return renderer.OverlayVisible()?1:0;}
+extern "C" __declspec(dllexport) void DivaNativeDLSSQueueKey(unsigned int key){if(!stopped)renderer.QueueKey(key);}
+extern "C" __declspec(dllexport) int DivaNativeDLSSSelectedBackend(){return renderer.Config().backend;}
+extern "C" __declspec(dllexport) int DivaNativeDLSSBackendReady(){return renderer.BackendReady()?1:0;}
 extern "C" __declspec(dllexport) void D3DInit(IDXGISwapChain* s,ID3D11Device* d,ID3D11DeviceContext* c){Install(d,c,s);}
 extern "C" __declspec(dllexport) void OnFrame(IDXGISwapChain* s){
     if(stopped||replay||s!=gameSwap)return;
