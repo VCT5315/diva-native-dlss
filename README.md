@@ -28,7 +28,7 @@
    - `DivaNativeDLSS.addon64` —— **放在游戏根目录**的 ReShade 配置面板（可选，见下）
 2. 准备运行库（安装包都不包含）：
    - NVIDIA：从 [NVIDIA 官方 DLSS 仓库](https://github.com/NVIDIA/DLSS) 获取 `nvngx_dlss.dll`，放在游戏 EXE 所在目录。
-   - AMD：需要 `amd_fidelityfx_upscaler_dx12.dll`。**多数情况下无需手动准备** —— 装了 FSR 4 的游戏（战地 6、黑神话悟空、赛博朋克 2077 等）已经把它放在自己的目录里，模组会自动扫描 Steam 库并**选择版本最新的那一份**（优先 4.1）。若找不到，运行 `FetchFSR.ps1` 下载。
+   - AMD：需要 `amd_fidelityfx_upscaler_dx12.dll`，**请自行准备**——本模组不下载、也不分发任何运行库。把它放到 `mods/Diva Native DLSS/`、游戏根目录或 `游戏根目录/D3D12_Optiscaler/` 任一位置。模组也会扫描 Steam 库并选用版本最新的那一份，所以已装 FSR 4 的游戏（战地 6、黑神话悟空、赛博朋克 2077 等）自带的那份通常会被直接找到。
 3. 在 DMM 中勾选 **Diva Native DLSS**，通过 DMM 启动。先进入一个 3D PV 确认效果。
 4. 更新时先备份自己的 `settings.ini`。卸载可在 DMM 中取消勾选，或退出游戏后删除该模组文件夹。
 
@@ -127,7 +127,7 @@ release/DivaNativeDLSS-0.3.0/
 
 `build/`、`release/`、`*.dll`、`*.exe` 都在 `.gitignore` 中——**编译产物不入库**。ReShade 附加组件是独立目标（`DivaNativeDLSSAddon`），可用 `--target DivaNativeDLSSAddon` 单独构建；它**不引入任何 ReShade 或 ImGui 头文件**，全部 ABI 在 `src_reshade/reshade_min.hpp` 里按源码核实后手工声明（原因见 [docs/reshade-addon.md](docs/reshade-addon.md)：master 的 `RESHADE_API_VERSION` 是 20 而 6.6.2 只接受 18；包含 `imgui.h` 会触发 ImGui 版本锁）。
 
-NVIDIA 后端是可选的。若 `third_party/ngx/lib/nvsdk_ngx_s.lib` 不存在，配置阶段会退回**仅 FSR** 构建并给出提示；要启用 DLSS 先运行 `FetchSDK.ps1`（从固定 NVIDIA 提交下载 SDK 头、静态库与许可证并校验 SHA-256，不入 Git）。
+NVIDIA 后端是可选的。若 `third_party/ngx/lib/nvsdk_ngx_s.lib` 不存在，配置阶段会退回**仅 FSR** 构建并给出提示。要启用 DLSS，请自行从 [NVIDIA DLSS 仓库](https://github.com/NVIDIA/DLSS) 获取 SDK，按 `third_party/ngx/` 的布局放好头文件与静态库——**本仓库不下载、也不包含 NVIDIA SDK**。
 
 发布包中的 DLL 是已做游戏内验证的构建；重新构建不保证二进制逐字节一致。
 
@@ -158,7 +158,7 @@ Experimental native-resolution upscaling for Project DIVA Mega Mix+, tested with
 
 The configuration UI is a **ReShade add-on** (`DivaNativeDLSS.addon64`, placed in the game root), not an in-game panel: an earlier attempt at drawing a panel on the game's own back buffer never appeared, so the UI moved to ReShade's overlay. The two sides are coupled only through `settings.ini`, which the mod hot-reloads. ReShade is optional - without it, edit the ini directly.
 
-NVIDIA needs `nvngx_dlss.dll` from NVIDIA. AMD needs `amd_fidelityfx_upscaler_dx12.dll`; the mod finds copies installed by FSR 4 games automatically, preferring the newest build, and `FetchFSR.ps1` can download one otherwise. FSR 4.1 requires RDNA4.
+NVIDIA needs `nvngx_dlss.dll` from NVIDIA. AMD needs `amd_fidelityfx_upscaler_dx12.dll`, which you supply yourself - the mod neither downloads nor redistributes runtimes. Put it in `mods/Diva Native DLSS/`, the game root, or `D3D12_Optiscaler/`; the mod also scans Steam libraries, so a copy shipped by an installed FSR 4 game is usually found on its own. FSR 4.1 requires RDNA4.
 
 F4 toggles upscaling, F5 visualizes motion vectors, F6 resets history. The FSR backend bridges D3D11 to a D3D12 device because FSR 4 has no DX11 provider - see [docs/fsr4.md](docs/fsr4.md) for the design and measured validation results.
 

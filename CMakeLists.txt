@@ -8,13 +8,13 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
-# The NVIDIA NGX (DLSS) backend needs the SDK import library from FetchSDK.ps1.
+# The NVIDIA NGX (DLSS) backend needs the SDK import library. This build never
 # It is optional: without it the build still produces a working DLL that offers
 # the AMD FidelityFX (FSR4) backend, which is all an AMD GPU needs.
 option(DIVA_ENABLE_NGX "Build the NVIDIA DLSS (NGX) backend" ON)
 if(DIVA_ENABLE_NGX AND NOT EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/ngx/lib/nvsdk_ngx_s.lib")
     message(STATUS "NVIDIA NGX SDK not found - building without the DLSS backend.")
-    message(STATUS "Run FetchSDK.ps1 to enable DLSS alongside FSR4.")
+    message(STATUS "Place the NVIDIA SDK under third_party/ngx/ to enable DLSS alongside FSR4.")
     set(DIVA_ENABLE_NGX OFF)
 endif()
 

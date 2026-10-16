@@ -61,15 +61,14 @@ runtime, in this order:
    **newest build wins**, so an FSR 4.1 copy is preferred over an older 4.0 one
 
 Most players already have one: FSR 4 titles such as Battlefield 6, Black Myth:
-Wukong, Cyberpunk 2077 and others install it next to their executable. If none
-is present, run:
+Wukong, Cyberpunk 2077 and others install it next to their executable.
 
-```powershell
-powershell -ExecutionPolicy Bypass -File .\FetchFSR.ps1
-```
-
-which downloads the pinned FidelityFX SDK release and extracts
-`amd_fidelityfx_upscaler_dx12.dll` into the mod folder.
+If none is present, supply the file yourself. This project does not download or
+redistribute any runtime - copy `amd_fidelityfx_upscaler_dx12.dll` into the mod
+folder, the game root, or `D3D12_Optiscaler/`. The legitimate source is the
+[FidelityFX SDK](https://github.com/GPUOpen-LibrariesAndSDKs/FidelityFX-SDK)
+release archive, where it is `Kits/FidelityFX/signedbin/amd_fidelityfx_upscaler_dx12.dll`,
+or the install directory of any FSR 4 title you own.
 
 Per AMD's `docs/license.md`, the upscaler DLL and the FidelityFX headers are
 covered by the MIT exception list in that file, so redistributing them with the

@@ -34,7 +34,7 @@ FSR 4 只有 D3D12 后端，因此模组在同一块适配器上另建 D3D12 设
   · 旧版自绘面板（F7）不可用，OverlayKey 保留但无作用。
   · DLSS/NGX 后端未经编译与运行验证——开发环境没有 NVIDIA SDK，构建时自动退回仅 FSR。
 
-运行库：NVIDIA 需自行获取 nvngx_dlss.dll；AMD 的 amd_fidelityfx_upscaler_dx12.dll 会自动在已装 FSR 4 的游戏目录中查找并选用版本最新的一份，找不到时可运行 FetchFSR.ps1 下载。安装包不包含任何运行库、神经渲染插件或 ReShade。
+运行库：本模组**不下载、也不分发任何运行库**，请自行准备——NVIDIA 需要 nvngx_dlss.dll，AMD 需要 amd_fidelityfx_upscaler_dx12.dll（可从已装 FSR 4 的游戏目录复制；模组也会自动扫描 Steam 库并选用版本最新的一份）。安装包不包含任何运行库、神经渲染插件或 ReShade。
 
 按键：F4 超分开关（每次切换弹一次状态提示）；F5 运动矢量诊断；F6 历史重置。三者均为全局，配置面板打开时也生效。
 
