@@ -6,7 +6,7 @@
 
 > **AMD 显卡**：FSR 4.1 需要 RDNA4（RX 9000 系列）。本项目已在 **RX 9070 XT**（驱动 32.0.32015.2008）+ 真实 FSR 4.1 运行库上端到端验证，覆盖 **3840×2160** 与 **1920×1080**。实现细节、实测数据与限制见 [docs/fsr4.md](docs/fsr4.md)。
 
-[下载安装包](https://github.com/xureimu-bit/diva-native-dlss/releases) · [可调物理模组](https://github.com/xureimu-bit/diva-physics-timing)
+> 本项目是 [xureimu-bit/diva-native-dlss](https://github.com/xureimu-bit/diva-native-dlss) 的 fork：上游提供基线实现，本分支在此之上加入 ReShade 配置面板、**1920×1080 修复**与**切换设置掉驱动修复**。发布包请从**本 fork 的 Releases** 获取——上游的 Release 不包含这些改动。相关模组：[可调物理模组](https://github.com/xureimu-bit/diva-physics-timing)。
 
 ## 本版要点
 
