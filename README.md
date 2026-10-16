@@ -148,9 +148,33 @@ NVIDIA 后端是可选的。若 `third_party/ngx/lib/nvsdk_ngx_s.lib` 不存在�
 .\bridge_final.exe legacy
 ```
 
-## 许可
+## 许可与声明
 
-项目自己的代码采用 [MIT](LICENSE)。MinHook、NVIDIA SDK、AMD FidelityFX SDK 及各自运行库保留各自条款，见 [第三方声明](THIRD-PARTY-NOTICES.md)。游戏及各厂商商标属于其各自权利人，本项目为非官方模组。
+项目自己的代码采用 [MIT](LICENSE)。第三方组件保留各自条款，完整原文见 [第三方声明](THIRD-PARTY-NOTICES.md)。
+
+**AMD FidelityFX SDK / FSR 4.1。** `third_party/ffx/` 下的公共 API 头文件取自 FidelityFX SDK v2.3.0，全部位于该 SDK `docs/license.md` 的 **MIT 例外清单**上：
+
+```
+Copyright (C) Advanced Micro Devices, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this
+software and associated documentation files (the "Software"), to deal in the Software
+without restriction, including without limitation the rights to use, copy, modify,
+merge, publish, distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to the following
+conditions:
+
+The above copyright notice and this permission notice shall be included in all copies
+or substantial portions of the Software.
+```
+
+完整许可（含免责声明）保存在 `third_party/ffx/LICENSE.txt`。
+
+**运行库不在本项目中。** `amd_fidelityfx_upscaler_dx12.dll` 与 `nvngx_dlss.dll` **既不分发也不下载**——本模组加载的是用户自行准备的那一份，或已装 FSR 4 的游戏留下的副本。参见[安装](#安装)一节。
+
+**商标与非隶属声明。** AMD、Radeon、FidelityFX、FSR 是 Advanced Micro Devices, Inc. 的商标；NVIDIA、GeForce、RTX、DLSS 是 NVIDIA Corporation 的商标；初音未来与 Project DIVA 属于各自权利人。**本项目是非官方粉丝作品，与上述公司及游戏的开发、发行方无隶属、未获授权、未获背书、无赞助关系。** 所有商标归其各自权利人所有。
+
+本仓库不包含游戏可执行文件、游戏 shader 或任何商业 ReShade 附加组件，也不捆绑 ReShade。
 
 ## English
 
